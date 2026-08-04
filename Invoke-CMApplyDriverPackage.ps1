@@ -343,7 +343,7 @@ param(
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer manufacturer when running in debug mode.")]
 	[ValidateNotNullOrEmpty()]
-	[ValidateSet("HP", "Hewlett-Packard", "Dell", "Lenovo", "Microsoft", "Fujitsu", "Panasonic", "Viglen", "AZW", "Getac", "Intel", "ByteSpeed", "ASUS")]
+	[ValidateSet("HP", "Hewlett-Packard", "Dell", "Lenovo", "Microsoft", "Fujitsu", "Panasonic", "Viglen", "AZW", "Getac", "Intel", "ByteSpeed", "ASUS", "Nutanix")]
 	[string]$Manufacturer,
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer model when running in debug mode.")]
@@ -1496,6 +1496,12 @@ Process {
 		# Gather computer details based upon specific computer manufacturer
 		$ComputerManufacturer = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Manufacturer).Trim()
 		
+        # Handle blank manufacturer result from Nutanix VMs
+        if ([string]::IsNullOrEmpty($ComputerManufacturer)) {
+				$ComputerManufacturer = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace root\WMI).SystemManufacturer.Trim()
+		}
+
+		
 		# Wrapped in try/catch so a failure in any manufacturer-specific WMI/parse step (e.g. a null
 		# BaseBoardProduct, a short Lenovo Model for SubString, or a Dell OEMString without a bracketed
 		# SKU) is logged with the manufacturer context, instead of surfacing only as a generic error
@@ -1573,6 +1579,12 @@ Process {
 					$ComputerDetails.Manufacturer = "ByteSpeed"
 					$ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
 				}
+			}
+			"*Nutanix*" {
+				$ComputerDetails.Manufacturer = "Nutanix"
+				$ComputerDetails.Model = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace root\WMI).SystemProductName.Trim()
+				$ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace root\WMI).SystemSKU.Trim()
+                $ComputerDetails.FallbackSKU = "8.6.0"  # Set from 7/30/2025
 			}
 			Default {
 				# =============================================================================
